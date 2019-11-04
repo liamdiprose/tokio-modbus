@@ -1,11 +1,11 @@
 use crate::frame::{tcp::*, *};
 use crate::proto::tcp::Proto;
 
-use futures::Future;
+use std::future::Future;
 use std::io::Error;
 use std::net::SocketAddr;
-use tokio_proto::TcpServer;
-use tokio_service::{NewService, Service};
+//use tokio_proto::TcpServer;
+//use tokio_service::{NewService, Service};
 
 struct ServiceWrapper<S> {
     service: S,
@@ -27,7 +27,7 @@ where
     type Request = RequestAdu;
     type Response = ResponseAdu;
     type Error = Error;
-    type Future = Box<dyn Future<Item = Self::Response, Error = Self::Error>>;
+    type Future = Box<dyn Future<Output = Result<Self::Response, Self::Error>>>;
 
     fn call(&self, adu: Self::Request) -> Self::Future {
         let Self::Request { hdr, pdu, .. } = adu;
@@ -84,7 +84,7 @@ impl Server {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::future;
+    //use futures::future;
 
     #[test]
     fn service_wrapper() {
@@ -100,7 +100,7 @@ mod tests {
             type Future = Box<dyn Future<Item = Self::Response, Error = Self::Error>>;
 
             fn call(&self, _: Self::Request) -> Self::Future {
-                Box::new(future::ok(self.response.clone()))
+                Box::new(Ok(self.response.clone()))
             }
         }
 

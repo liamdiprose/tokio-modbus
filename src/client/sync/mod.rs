@@ -16,7 +16,7 @@ use crate::slave::*;
 
 use std::io::Result;
 
-use tokio_core::reactor::Core;
+//use tokio_core::reactor::Core;
 
 /// A transport independent synchronous client trait.
 pub trait Client: SlaveContext {

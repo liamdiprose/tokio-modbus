@@ -4,7 +4,7 @@ use crate::frame::rtu::{RequestAdu, ResponseAdu};
 use std::io::Error;
 use tokio_codec::{Decoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_proto::pipeline::{ClientProto, ServerProto};
+//use tokio_proto::pipeline::{ClientProto, ServerProto};
 
 pub(crate) struct Proto;
 
@@ -38,7 +38,7 @@ mod tests {
 
     #[test]
     fn bind_transport() {
-        use tokio_proto::pipeline::ClientProto;
+        //use tokio_proto::pipeline::ClientProto;
         let proto = Proto;
         let io = DummyIo;
         let parts = proto.bind_transport(io).unwrap().into_parts();

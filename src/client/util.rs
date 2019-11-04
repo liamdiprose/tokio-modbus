@@ -2,9 +2,7 @@
 
 use super::*;
 
-use futures::{future, Future};
-
-use std::{cell::RefCell, io::Error, rc::Rc};
+use std::{cell::RefCell, io::Error, pin::Pin, rc::Rc};
 
 /// Helper for sharing a context between multiple clients,
 /// i.e. when addressing multiple slave devices in turn.
@@ -22,12 +20,11 @@ impl SharedContextHolder {
     }
 
     /// Disconnect and drop the wrapped context reference.
-    fn disconnect(&mut self) -> impl Future<Item = (), Error = Error> {
+    async fn disconnect(&mut self) -> Result<(), Error> {
         if let Some(context) = self.context.take() {
-            future::Either::A(context.borrow().disconnect())
-        } else {
-            future::Either::B(future::ok(()))
+            context.borrow().disconnect().await;
         }
+        Ok(())
     }
 
     /// Reconnect by replacing the wrapped context reference.
@@ -49,13 +46,13 @@ impl SharedContextHolder {
 /// Implement this trait for reconnecting a `SharedContext` on demand.
 pub trait NewContext {
     /// Create a new context.
-    fn new_context(&self) -> Box<dyn Future<Item = Context, Error = Error>>;
+    fn new_context(&self) -> Pin<Box<dyn Future<Output = Result<Context, Error>>>>; //FIXME: dyn Future?
 }
 
 /// Reconnectable environment with a shared context.
 pub struct SharedContext {
     shared_context: SharedContextHolder,
-    new_context: Box<dyn NewContext>,
+    new_context: Pin<Box<dyn NewContext>>,
 }
 
 impl SharedContext {
@@ -85,9 +82,9 @@ impl SharedContext {
 }
 
 /// Asynchronously (disconnect and) reconnect the shared context.
-pub fn reconnect_shared_context(
+pub async fn reconnect_shared_context(
     shared_context: &Rc<RefCell<SharedContext>>,
-) -> impl Future<Item = (), Error = Error> {
+) -> Result<(), Error> {
     let disconnected_context = Rc::clone(shared_context);
     // The existing context needs to be disconnected first to
     // release any resources that might be reused for the new
@@ -96,25 +93,24 @@ pub fn reconnect_shared_context(
         .borrow_mut()
         .shared_context
         .disconnect()
-        .and_then(move |()| {
-            // After disconnecting the existing context create
-            // a new instance...
-            debug_assert!(!disconnected_context.borrow().is_connected());
-            let reconnected_context = Rc::clone(&disconnected_context);
-            disconnected_context
-                .borrow()
-                .new_context
-                .new_context()
-                .map(move |context| {
-                    // ...and put it into the shared context. The new
-                    // context will then be used for all subsequent
-                    // client requests.
-                    reconnected_context
-                        .borrow_mut()
-                        .shared_context
-                        .reconnect(context)
-                })
-        })
+        .await;
+
+    // After disconnecting the existing context create
+    // a new instance...
+    debug_assert!(!disconnected_context.borrow().is_connected());
+    let reconnected_context = Rc::clone(&disconnected_context);
+
+    let context = disconnected_context
+        .borrow()
+        .new_context
+        .new_context()
+        .await?;
+
+    reconnected_context
+        .borrow_mut()
+        .shared_context
+        .reconnect(context);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -126,9 +122,9 @@ mod tests {
     struct NewContextMock;
 
     impl NewContext for NewContextMock {
-        fn new_context(&self) -> Box<dyn Future<Item = Context, Error = Error>> {
+        fn new_context(&self) -> Box<dyn Future<Output = Result<Context, Error>>> {
             let client: Box<dyn Client> = Box::new(ClientMock::default());
-            Box::new(future::ok(Context::from(client)))
+            Box::new(Ok(Context::from(client)))
         }
     }
 

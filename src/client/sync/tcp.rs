@@ -4,7 +4,7 @@ use crate::client::tcp::connect_slave as async_connect_slave;
 use crate::slave::Slave;
 
 use std::net::SocketAddr;
-use tokio_core::reactor::Core;
+//use tokio_core::reactor::Core;
 
 /// Establish a direct connection to a Modbus TCP coupler.
 pub fn connect(socket_addr: SocketAddr) -> Result<Context> {

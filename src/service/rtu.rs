@@ -3,26 +3,26 @@ use crate::frame::{rtu::*, *};
 use crate::proto::rtu::Proto;
 use crate::slave::*;
 
-use futures::{future, Future};
+use std::future::Future;
 use std::io::{Error, ErrorKind};
-use tokio_core::reactor::Handle;
+//use tokio_core::reactor::Handle;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_proto::pipeline::ClientService;
-use tokio_proto::BindClient;
-use tokio_service::Service;
+//use tokio_proto::pipeline::ClientService;
+//use tokio_proto::BindClient;
+//use tokio_service::Service;
 
-pub(crate) fn connect_slave<T>(
+pub(crate) async fn connect_slave<T>(
     handle: &Handle,
     transport: T,
     slave: Slave,
-) -> impl Future<Item = Context<T>, Error = Error>
+) -> Result<Context<T>, Error>
 where
     T: AsyncRead + AsyncWrite + 'static,
 {
     let proto = Proto;
     let service = proto.bind_client(handle, transport);
     let slave_id = slave.into();
-    future::ok(Context { service, slave_id })
+    Ok(Context { service, slave_id })
 }
 
 /// Modbus RTU client
@@ -46,16 +46,16 @@ impl<T: AsyncRead + AsyncWrite + 'static> Context<T> {
         }
     }
 
-    fn call(&self, req: Request) -> impl Future<Item = Response, Error = Error> {
+    async fn call(&self, req: Request) -> Result<Response, Error> {
         let disconnect = req == Request::Disconnect;
         let req_adu = self.next_request_adu(req, disconnect);
         let req_hdr = req_adu.hdr;
-        self.service
-            .call(req_adu)
-            .and_then(move |res_adu| match res_adu.pdu {
-                ResponsePdu(Ok(res)) => verify_response_header(req_hdr, res_adu.hdr).and(Ok(res)),
-                ResponsePdu(Err(err)) => Err(Error::new(ErrorKind::Other, err)),
-            })
+        let res_adu = self.service.call(req_adu).await;
+
+        match res_adu.pdu {
+            ResponsePdu(Ok(res)) => verify_response_header(req_hdr, res_adu.hdr).and(Ok(res)),
+            ResponsePdu(Err(err)) => Err(Error::new(ErrorKind::Other, err)),
+        }
     }
 }
 
@@ -79,7 +79,7 @@ impl<T: AsyncRead + AsyncWrite + 'static> SlaveContext for Context<T> {
 }
 
 impl<T: AsyncRead + AsyncWrite + 'static> Client for Context<T> {
-    fn call(&self, req: Request) -> Box<dyn Future<Item = Response, Error = Error>> {
+    fn call(&self, req: Request) -> Box<dyn Future<Output = Result<Response, Error>>> {
         Box::new(self.call(req))
     }
 }

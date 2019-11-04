@@ -4,7 +4,7 @@ use crate::frame::tcp::{RequestAdu, ResponseAdu};
 use std::io::Error;
 use tokio_codec::{Decoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_proto::pipeline::{ClientProto, ServerProto};
+//use tokio_proto::pipeline::{ClientProto, ServerProto};
 
 pub(crate) struct Proto;
 

@@ -12,12 +12,14 @@ pub mod util;
 use crate::frame::*;
 use crate::slave::*;
 
-use futures::prelude::*;
+use std::future::Future;
+
 use std::io::{Error, ErrorKind};
+use std::pin::Pin;
 
 /// A transport independent asynchronous client trait.
 pub trait Client: SlaveContext {
-    fn call(&self, request: Request) -> Box<dyn Future<Item = Response, Error = Error>>;
+    fn call(&self, request: Request) -> Box<dyn Future<Output = Result<Response, Error>>>;
 }
 
 /// An asynchronous Modbus reader.
@@ -26,25 +28,25 @@ pub trait Reader: Client {
         &self,
         _: Address,
         _: Quantity,
-    ) -> Box<dyn Future<Item = Vec<Coil>, Error = Error>>;
+    ) -> Box<dyn Future<Output = Result<Vec<Coil>, Error>>>;
 
     fn read_discrete_inputs(
         &self,
         _: Address,
         _: Quantity,
-    ) -> Box<dyn Future<Item = Vec<Coil>, Error = Error>>;
+    ) -> Box<dyn Future<Output = Result<Vec<Coil>, Error>>>;
 
     fn read_input_registers(
         &self,
         _: Address,
         _: Quantity,
-    ) -> Box<dyn Future<Item = Vec<Word>, Error = Error>>;
+    ) -> Box<dyn Future<Output = Result<Vec<Word>, Error>>>;
 
     fn read_holding_registers(
         &self,
         _: Address,
         _: Quantity,
-    ) -> Box<dyn Future<Item = Vec<Word>, Error = Error>>;
+    ) -> Box<dyn Future<Output = Result<Vec<Word>, Error>>>;
 
     fn read_write_multiple_registers(
         &self,
@@ -52,30 +54,31 @@ pub trait Reader: Client {
         _: Quantity,
         _: Address,
         _: &[Word],
-    ) -> Box<dyn Future<Item = Vec<Word>, Error = Error>>;
+    ) -> Box<dyn Future<Output = Result<Vec<Word>, Error>>>;
 }
 
 /// An asynchronous Modbus writer.
 pub trait Writer: Client {
-    fn write_single_coil(&self, _: Address, _: Coil) -> Box<dyn Future<Item = (), Error = Error>>;
+    fn write_single_coil(&self, _: Address, _: Coil)
+        -> Box<dyn Future<Output = Result<(), Error>>>;
 
     fn write_multiple_coils(
         &self,
         _: Address,
         _: &[Coil],
-    ) -> Box<dyn Future<Item = (), Error = Error>>;
+    ) -> Box<dyn Future<Output = Result<(), Error>>>;
 
     fn write_single_register(
         &self,
         _: Address,
         _: Word,
-    ) -> Box<dyn Future<Item = (), Error = Error>>;
+    ) -> Box<dyn Future<Output = Result<(), Error>>>;
 
     fn write_multiple_registers(
         &self,
         _: Address,
         _: &[Word],
-    ) -> Box<dyn Future<Item = (), Error = Error>>;
+    ) -> Box<dyn Future<Output = Result<(), Error>>>;
 }
 
 /// An asynchronous Modbus client context.
@@ -84,15 +87,16 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn disconnect(&self) -> impl Future<Item = (), Error = Error> {
+    pub async fn disconnect(&self) -> Result<(), Error> {
         // Disconnecting is expected to fail!
-        self.client.call(Request::Disconnect).then(|res| match res {
+        let res = self.client.call(Request::Disconnect).await;
+        match res {
             Ok(_) => unreachable!(),
             Err(err) => match err.kind() {
                 ErrorKind::NotConnected | ErrorKind::BrokenPipe => Ok(()),
                 _ => Err(err),
             },
-        })
+        }
     }
 }
 
@@ -109,7 +113,7 @@ impl Into<Box<dyn Client>> for Context {
 }
 
 impl Client for Context {
-    fn call(&self, request: Request) -> Box<dyn Future<Item = Response, Error = Error>> {
+    fn call(&self, request: Request) -> Pin<Box<dyn Future<Output = Result<Response, Error>>>> {
         self.client.call(request)
     }
 }
@@ -125,7 +129,7 @@ impl Reader for Context {
         &self,
         addr: Address,
         cnt: Quantity,
-    ) -> Box<dyn Future<Item = Vec<Coil>, Error = Error>> {
+    ) -> Box<dyn Future<Output = Result<Vec<Coil>, Error>>> {
         Box::new(
             self.client
                 .call(Request::ReadCoils(addr, cnt))
@@ -145,7 +149,7 @@ impl Reader for Context {
         &self,
         addr: Address,
         cnt: Quantity,
-    ) -> Box<dyn Future<Item = Vec<Coil>, Error = Error>> {
+    ) -> Box<dyn Future<Output = Result<Vec<Coil>, Error>>> {
         Box::new(
             self.client
                 .call(Request::ReadDiscreteInputs(addr, cnt))
@@ -165,7 +169,7 @@ impl Reader for Context {
         &self,
         addr: Address,
         cnt: Quantity,
-    ) -> Box<dyn Future<Item = Vec<Word>, Error = Error>> {
+    ) -> Box<dyn Future<Output = Result<Vec<Word>, Error>>> {
         Box::new(
             self.client
                 .call(Request::ReadInputRegisters(addr, cnt))
@@ -186,7 +190,7 @@ impl Reader for Context {
         &self,
         addr: Address,
         cnt: Quantity,
-    ) -> Box<dyn Future<Item = Vec<Word>, Error = Error>> {
+    ) -> Box<dyn Future<Output = Result<Vec<Word>, Error>>> {
         Box::new(
             self.client
                 .call(Request::ReadHoldingRegisters(addr, cnt))
@@ -209,7 +213,7 @@ impl Reader for Context {
         read_cnt: Quantity,
         write_addr: Address,
         write_data: &[Word],
-    ) -> Box<dyn Future<Item = Vec<Word>, Error = Error>> {
+    ) -> Box<dyn Future<Output = Result<Vec<Word>, Error>>> {
         Box::new(
             self.client
                 .call(Request::ReadWriteMultipleRegisters(
@@ -237,7 +241,7 @@ impl Writer for Context {
         &self,
         addr: Address,
         coil: Coil,
-    ) -> Box<dyn Future<Item = (), Error = Error>> {
+    ) -> Box<dyn Future<Output = Result<(), Error>>> {
         Box::new(
             self.client
                 .call(Request::WriteSingleCoil(addr, coil))
@@ -258,7 +262,7 @@ impl Writer for Context {
         &self,
         addr: Address,
         coils: &[Coil],
-    ) -> Box<dyn Future<Item = (), Error = Error>> {
+    ) -> Box<dyn Future<Output = Result<(), Error>>> {
         let cnt = coils.len();
         Box::new(
             self.client
@@ -280,7 +284,7 @@ impl Writer for Context {
         &self,
         addr: Address,
         data: Word,
-    ) -> Box<dyn Future<Item = (), Error = Error>> {
+    ) -> Box<dyn Future<Output = Result<(), Error>>> {
         Box::new(
             self.client
                 .call(Request::WriteSingleRegister(addr, data))
@@ -301,7 +305,7 @@ impl Writer for Context {
         &self,
         addr: Address,
         data: &[Word],
-    ) -> Box<dyn Future<Item = (), Error = Error>> {
+    ) -> Box<dyn Future<Output = Result<(), Error>>> {
         let cnt = data.len();
         Box::new(
             self.client
@@ -324,7 +328,8 @@ impl Writer for Context {
 mod tests {
     use super::*;
 
-    use futures::future;
+    //use futures::future;
+    use std::future;
 
     use std::cell::RefCell;
 
@@ -351,12 +356,12 @@ mod tests {
     }
 
     impl Client for ClientMock {
-        fn call(&self, request: Request) -> Box<dyn Future<Item = Response, Error = Error>> {
+        fn call(&self, request: Request) -> Box<dyn Future<Output = Result<Response, Error>>> {
             self.last_request.replace(Some(request));
-            Box::new(future::result(match self.next_response.as_ref().unwrap() {
+            Box::new(async || match self.next_response.as_ref().unwrap() {
                 Ok(response) => Ok(response.clone()),
                 Err(err) => Err(Error::new(err.kind(), format!("{}", err))),
-            }))
+            })
         }
     }
 

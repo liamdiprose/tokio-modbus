@@ -3,25 +3,24 @@ use crate::frame::{tcp::*, *};
 use crate::proto::tcp::Proto;
 use crate::slave::*;
 
-use futures::Future;
 use std::cell::Cell;
+use std::future::Future;
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor::Handle;
-use tokio_proto::pipeline::ClientService;
-use tokio_proto::TcpClient;
-use tokio_service::Service;
+//use tokio_core::net::TcpStream;
+//use tokio_core::reactor::Handle;
+//use tokio_proto::pipeline::ClientService;
+//use tokio_proto::TcpClient;
+//use tokio_service::Service;
 
-pub(crate) fn connect_slave(
+pub(crate) async fn connect_slave(
     handle: &Handle,
     socket_addr: SocketAddr,
     slave: Slave,
-) -> impl Future<Item = Context, Error = Error> {
+) -> Result<Context, Error> {
     let unit_id = slave.into();
-    TcpClient::new(Proto)
-        .connect(&socket_addr, &handle)
-        .map(move |service| Context::new(service, unit_id))
+    let service = TcpClient::new(Proto).connect(&socket_addr, &handle);
+    Ok(Context::new(service, unit_id))
 }
 
 const INITIAL_TRANSACTION_ID: TransactionId = 0;
@@ -67,16 +66,16 @@ impl Context {
         }
     }
 
-    pub fn call(&self, req: Request) -> impl Future<Item = Response, Error = Error> {
+    pub async fn call(&self, req: Request) -> Result<Response, Error> {
         let disconnect = req == Request::Disconnect;
         let req_adu = self.next_request_adu(req, disconnect);
         let req_hdr = req_adu.hdr;
-        self.service
-            .call(req_adu)
-            .and_then(move |res_adu| match res_adu.pdu {
-                ResponsePdu(Ok(res)) => verify_response_header(req_hdr, res_adu.hdr).and(Ok(res)),
-                ResponsePdu(Err(err)) => Err(Error::new(ErrorKind::Other, err)),
-            })
+        let res_adu = self.service.call(req_adu).await;
+
+        match res_adu.pdu {
+            ResponsePdu(Ok(res)) => verify_response_header(req_hdr, res_adu.hdr).and(Ok(res)),
+            ResponsePdu(Err(err)) => Err(Error::new(ErrorKind::Other, err)),
+        }
     }
 }
 
@@ -100,7 +99,7 @@ impl SlaveContext for Context {
 }
 
 impl Client for Context {
-    fn call(&self, req: Request) -> Box<dyn Future<Item = Response, Error = Error>> {
+    fn call(&self, req: Request) -> Box<dyn Future<Output = Result<Response, Error>>> {
         Box::new(self.call(req))
     }
 }

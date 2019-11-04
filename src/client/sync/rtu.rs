@@ -3,7 +3,7 @@ use super::{Context, Result};
 use crate::client::rtu::connect_slave as async_connect_slave;
 use crate::slave::Slave;
 
-use tokio_core::reactor::Core;
+//use tokio_core::reactor::Core;
 use tokio_serial::{Serial, SerialPortSettings};
 
 /// Connect to no particular Modbus slave device for sending
