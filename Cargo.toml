@@ -17,7 +17,8 @@ futures-core-preview = "0.3.0-alpha.19"
 log = "0.4"
 smallvec = { version = "0.6", default-features = false }
 tokio-io = "0.2.0-alpha.6"
-tokio= "0.2.0-alpha.6"
+tokio = "0.2.0-alpha.6"
+tokio-executor = "0.2.0-alpha.6"
 tokio-codec = "0.2.0-alpha.6"
 tower-service = "0.3.0-alpha.2"
 tokio-tower = "0.2.0-alpha.2a"
@@ -25,12 +26,11 @@ tokio-tower = "0.2.0-alpha.2a"
 # tokio-proto = "0.1"
 # tokio-service = "0.2.0-alpha.6"
 
+# Disable default-features to exclude unused dependency on libudev
 [dependencies.tokio-serial]
 version = "4.3.3-tokio-0.2.0-alpha"
 optional = true
-
-# Disable default-features to exclude unused dependency on libudev
-default-features = true
+default-features = false
 
 [dev-dependencies]
 env_logger = "0.6"
