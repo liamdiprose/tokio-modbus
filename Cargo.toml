@@ -19,6 +19,9 @@ smallvec = { version = "0.6", default-features = false }
 tokio-io = "0.2.0-alpha.6"
 tokio= "0.2.0-alpha.6"
 tokio-codec = "0.2.0-alpha.6"
+tower-service = "0.3.0-alpha.2"
+tokio-tower = "0.2.0-alpha.2a"
+
 # tokio-proto = "0.1"
 # tokio-service = "0.2.0-alpha.6"
 
