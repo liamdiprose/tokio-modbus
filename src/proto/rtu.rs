@@ -5,10 +5,16 @@ use std::io::Error;
 use tokio_codec::{Decoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
 //use tokio_proto::pipeline::{ClientProto, ServerProto};
+use tokio_tower::pipeline::{Client, Server};
 
 pub(crate) struct Proto;
 
-impl<T: AsyncRead + AsyncWrite + 'static> ClientProto<T> for Proto {
+
+impl Sink<SinkItem = RequestAdu> for Proto {
+
+}
+
+impl<T: AsyncRead + AsyncWrite + 'static> Client<T> for Proto {
     type Request = RequestAdu;
     type Response = ResponseAdu;
     type Transport = Framed<T, ClientCodec>;

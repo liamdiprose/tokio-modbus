@@ -6,6 +6,7 @@ use std::io::Error;
 use std::net::SocketAddr;
 //use tokio_proto::TcpServer;
 //use tokio_service::{NewService, Service};
+use tower_service::Service;
 
 struct ServiceWrapper<S> {
     service: S,
@@ -17,29 +18,36 @@ impl<S> ServiceWrapper<S> {
     }
 }
 
-impl<S> Service for ServiceWrapper<S>
+impl<S> Service<RequestAdu> for ServiceWrapper<S>
 where
-    S: Service + Send + Sync + 'static,
-    S::Request: From<Request>,
+    Request: From<RequestAdu>,
+    S: Service<Request> + Send + Sync + 'static,
     S::Response: Into<Response>,
     S::Error: Into<Error>,
 {
-    type Request = RequestAdu;
     type Response = ResponseAdu;
     type Error = Error;
-    type Future = Box<dyn Future<Output = Result<Self::Response, Self::Error>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.service.poll_ready()
+    }
 
     fn call(&self, adu: Self::Request) -> Self::Future {
-        let Self::Request { hdr, pdu, .. } = adu;
+        let RequestAdu { hdr, pdu, .. } = adu;
         let req: Request = pdu.into();
-        Box::new(self.service.call(req.into()).then(move |rsp| match rsp {
-            Ok(rsp) => {
-                let rsp: Response = rsp.into();
-                let pdu = rsp.into();
-                Ok(Self::Response { hdr, pdu })
+
+        Box::new(async {
+            let rsp = self.service.call(req.into()).await;
+            match rsp {
+                Ok(rsp) => {
+                    let rsp: Response = rsp.into();
+                    let pdu = rsp.into();
+                    Ok(Self::Response { hdr, pdu })
+                }
+                Err(e) => Err(e.into()),
             }
-            Err(e) => Err(e.into()),
-        }))
+        })
     }
 }
 
@@ -84,7 +92,7 @@ impl Server {
 #[cfg(test)]
 mod tests {
     use super::*;
-    //use futures::future;
+    use std::future::Future;
 
     #[test]
     fn service_wrapper() {
