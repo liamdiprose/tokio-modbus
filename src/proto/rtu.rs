@@ -5,8 +5,15 @@ use std::io::Error;
 use tokio_codec::{Decoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
 //use tokio_proto::pipeline::{ClientProto, ServerProto};
+use tower_service::Service;
 
-pub(crate) struct Proto;
+/// The Tower service for Modbus
+pub(crate) struct Proto<S: Service<RequestAdu>> {
+    service: S
+}
+
+impl<S> Service<RequestAdu> for Proto<S> {
+}
 
 impl<T: AsyncRead + AsyncWrite + 'static> ClientProto<T> for Proto {
     type Request = RequestAdu;
@@ -14,9 +21,6 @@ impl<T: AsyncRead + AsyncWrite + 'static> ClientProto<T> for Proto {
     type Transport = Framed<T, ClientCodec>;
     type BindTransport = Result<Self::Transport, Error>;
 
-    fn bind_transport(&self, io: T) -> Self::BindTransport {
-        Ok(ClientCodec::default().framed(io))
-    }
 }
 
 impl<T: AsyncRead + AsyncWrite + 'static> ServerProto<T> for Proto {

@@ -1,7 +1,8 @@
 use crate::client::Client;
 use crate::frame::{tcp::*, *};
-use crate::proto::tcp::Proto;
+//use crate::proto::tcp::Proto;
 use crate::slave::*;
+use crate::codec::tcp;
 
 use std::cell::Cell;
 use std::future::Future;
@@ -12,14 +13,15 @@ use std::net::SocketAddr;
 //use tokio_proto::pipeline::ClientService;
 //use tokio_proto::TcpClient;
 //use tokio_service::Service;
+use tokio::net::TcpStream;
+use tokio::codec::Framed;
 
 pub(crate) async fn connect_slave(
-    handle: &Handle,
     socket_addr: SocketAddr,
     slave: Slave,
 ) -> Result<Context, Error> {
     let unit_id = slave.into();
-    let service = TcpClient::new(Proto).connect(&socket_addr, &handle);
+    let service = Framed::new(TcpStream::connect(&socket_addr), tcp::ClientCodec);
     Ok(Context::new(service, unit_id))
 }
 

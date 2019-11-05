@@ -1,18 +1,13 @@
-use crate::client::Client;
 use crate::frame::{rtu::*, *};
 use crate::proto::rtu::Proto;
 use crate::slave::*;
 
-use std::future::Future;
 use std::io::{Error, ErrorKind};
-//use tokio_core::reactor::Handle;
+use tokio_codec::{Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
-//use tokio_proto::pipeline::ClientService;
-//use tokio_proto::BindClient;
-//use tokio_service::Service;
+use tokio_tower::pipeline::Client;
 
 pub(crate) async fn connect_slave<T>(
-    handle: &Handle,
     transport: T,
     slave: Slave,
 ) -> Result<Context<T>, Error>
@@ -20,14 +15,14 @@ where
     T: AsyncRead + AsyncWrite + 'static,
 {
     let proto = Proto;
-    let service = proto.bind_client(handle, transport);
+    let service = Client::new(Framed::new(proto, transport));
     let slave_id = slave.into();
     Ok(Context { service, slave_id })
 }
 
 /// Modbus RTU client
-pub(crate) struct Context<T: AsyncRead + AsyncWrite + 'static> {
-    service: ClientService<T, Proto>,
+pub(crate) struct Context<T> {
+    service: Client<ResponseAdu, Error, RequestAdu>,
     slave_id: SlaveId,
 }
 
@@ -75,11 +70,5 @@ fn verify_response_header(req_hdr: Header, rsp_hdr: Header) -> Result<(), Error>
 impl<T: AsyncRead + AsyncWrite + 'static> SlaveContext for Context<T> {
     fn set_slave(&mut self, slave: Slave) {
         self.slave_id = slave.into();
-    }
-}
-
-impl<T: AsyncRead + AsyncWrite + 'static> Client for Context<T> {
-    fn call(&self, req: Request) -> Box<dyn Future<Output = Result<Response, Error>>> {
-        Box::new(self.call(req))
     }
 }

@@ -125,7 +125,7 @@
 pub mod prelude;
 
 pub mod client;
-pub mod server;
+//pub mod server;
 pub mod slave;
 
 mod codec;
