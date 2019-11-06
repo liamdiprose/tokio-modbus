@@ -1,33 +1,29 @@
-use crate::client::Client;
-use crate::frame::{rtu::*, *};
-use crate::proto::rtu::Proto;
+//use crate::client::Client;
+use crate::frame::rtu::{RequestAdu};
+use crate::proto::{*, rtu::*};
 use crate::slave::*;
 
 use std::future::Future;
 use std::io::{Error, ErrorKind};
-//use tokio_core::reactor::Handle;
 use tokio_io::{AsyncRead, AsyncWrite};
-//use tokio_proto::pipeline::ClientService;
-//use tokio_proto::BindClient;
-//use tokio_service::Service;
+use tokio_tower::pipeline::Client;
+use tower_service::Service;
 
-pub(crate) async fn connect_slave<T>(
-    handle: &Handle,
-    transport: T,
-    slave: Slave,
-) -> Result<Context<T>, Error>
+pub(crate) async fn connect_slave<T>(transport: T, slave: Slave) -> Result<Context<T>, Error>
 where
     T: AsyncRead + AsyncWrite + 'static,
 {
-    let proto = Proto;
-    let service = proto.bind_client(handle, transport);
-    let slave_id = slave.into();
-    Ok(Context { service, slave_id })
+    let service = make_client_service(transport);
+
+    Ok(Context { 
+        service: Box::new(service), 
+        slave_id: slave.into() 
+    })
 }
 
 /// Modbus RTU client
 pub(crate) struct Context<T: AsyncRead + AsyncWrite + 'static> {
-    service: ClientService<T, Proto>,
+    service: Client<Framed<T, ClientCodec>, Error, RequestAdu>,
     slave_id: SlaveId,
 }
 
@@ -46,16 +42,19 @@ impl<T: AsyncRead + AsyncWrite + 'static> Context<T> {
         }
     }
 
-    async fn call(&self, req: Request) -> Result<Response, Error> {
+    fn call(&self, req: Request) -> Box<dyn Future<Output = Result<Response, Error>>> {
         let disconnect = req == Request::Disconnect;
         let req_adu = self.next_request_adu(req, disconnect);
         let req_hdr = req_adu.hdr;
-        let res_adu = self.service.call(req_adu).await;
+        Box::new(async {
+            let res_adu = self.service.call(req_adu).await?;
+                //.map_err(|_e| std::io::Error::new(std::io::ErrorKind::Other, "Res_adu error"))?;
 
-        match res_adu.pdu {
-            ResponsePdu(Ok(res)) => verify_response_header(req_hdr, res_adu.hdr).and(Ok(res)),
-            ResponsePdu(Err(err)) => Err(Error::new(ErrorKind::Other, err)),
-        }
+            match res_adu.pdu {
+                ResponsePdu(Ok(res)) => verify_response_header(req_hdr, res_adu.hdr).and(Ok(res)),
+                ResponsePdu(Err(err)) => Err(Error::new(ErrorKind::Other, err)),
+            }
+        })
     }
 }
 

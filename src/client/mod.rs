@@ -1,8 +1,8 @@
 #[cfg(feature = "rtu")]
 pub mod rtu;
 
-#[cfg(feature = "sync")]
-pub mod sync;
+//#[cfg(feature = "sync")]
+//pub mod sync;
 
 #[cfg(feature = "tcp")]
 pub mod tcp;
@@ -13,6 +13,10 @@ use crate::frame::*;
 use crate::slave::*;
 
 use std::future::Future;
+use tower_service::Service;
+
+use tokio::prelude::{AsyncRead, AsyncWrite};
+use tokio::codec::Framed;
 
 use std::io::{Error, ErrorKind};
 use std::pin::Pin;
@@ -82,8 +86,8 @@ pub trait Writer: Client {
 }
 
 /// An asynchronous Modbus client context.
-pub struct Context {
-    client: Box<dyn Client>,
+pub struct Context<T: AsyncRead + AsyncWrite + Send + 'static> {
+    client: dyn Client<Framed<T, ClientCodec>, Error, RequestAdu>
 }
 
 impl Context {

@@ -1,25 +1,26 @@
-use crate::client::Client;
+//use crate::client::Client;
 use crate::frame::{tcp::*, *};
-use crate::proto::tcp::Proto;
+use crate::proto::{make_client_service, make_server_service};
 use crate::slave::*;
+use tokio_tower::Client;
 
 use std::cell::Cell;
 use std::future::Future;
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
+use tokio::net::TcpListener;
 //use tokio_core::net::TcpStream;
 //use tokio_core::reactor::Handle;
 //use tokio_proto::pipeline::ClientService;
 //use tokio_proto::TcpClient;
 //use tokio_service::Service;
 
-pub(crate) async fn connect_slave(
-    handle: &Handle,
-    socket_addr: SocketAddr,
-    slave: Slave,
-) -> Result<Context, Error> {
+pub(crate) async fn connect_slave(socket_addr: SocketAddr, slave: Slave) -> Result<Context, Error> {
     let unit_id = slave.into();
-    let service = TcpClient::new(Proto).connect(&socket_addr, &handle);
+    let transport = TcpListener::bind(&socket_addr);
+
+    let service = make_client_service(transport);
+
     Ok(Context::new(service, unit_id))
 }
 
@@ -27,13 +28,13 @@ const INITIAL_TRANSACTION_ID: TransactionId = 0;
 
 /// Modbus TCP client
 pub(crate) struct Context {
-    service: ClientService<TcpStream, Proto>,
+    service: Client<TcpListener, io::Error, RequestAdu>,
     unit_id: UnitId,
     transaction_id: Cell<TransactionId>,
 }
 
 impl Context {
-    fn new(service: ClientService<TcpStream, Proto>, unit_id: UnitId) -> Self {
+    fn new(service: Client<TcpListener, io::Error, RequestAdu>, unit_id: UnitId) -> Self {
         Self {
             service,
             unit_id,
